@@ -11,8 +11,11 @@ permissions:
   id-token: write
   contents: read
 
+env:
+  GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
 jobs:
-  test:
+  DEV:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,10 +23,10 @@ jobs:
         with:
           clean: true
 
-      - name: Check out repository templates-pipelines-actions
+      - name: Check out repository templates-pipeline
         uses: actions/checkout@v4
         with:
-          repository: 'lab-pessoal/templates-pipelines'
+          repository: 'lab-pessoal/templates-pipeline'
           ref: 'refs/heads/main'
           token: ${{ secrets.GH_TOKEN }}
           path: 'templates-pipeline'
