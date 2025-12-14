@@ -8,16 +8,32 @@ runs:
       with:
         terraform_version: 1.6.6
 
-    - name: ECR
+    - name: ECR (create or import)
       shell: bash
-      env: 
+      env:
+        AWS_REGION: us-east-1
         TF_VAR_app_name: ${{ github.workflow }}
-      run: | 
+      run: |
+        set -euo pipefail
         echo "::group::Terraform ECR"
 
-        terraform -chdir=./iac/infra-ecr init
-        terraform -chdir=./iac/infra-ecr apply -auto-approve
+        cd ./iac/infra-ecr
+        terraform init
+
+        REPO="$TF_VAR_app_name"
+
+        if terraform state show aws_ecr_repository.this >/dev/null 2>&1; then
+          echo "ECR já está no state: $REPO"
+        else
+          if aws ecr describe-repositories --repository-names "$REPO" --region "$AWS_REGION" >/dev/null 2>&1; then
+            echo "ECR existe na AWS, importando no state: $REPO"
+            terraform import aws_ecr_repository.this "$REPO" || true
+          else
+            echo "ECR não existe na AWS, será criado no apply: $REPO"
+          fi
+        fi
+
+        terraform apply -auto-approve
 
         echo "::endgroup::"
-  
       working-directory: ${{ github.workspace }}
