@@ -20,7 +20,7 @@ runs:
         set -e
 
         ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-        REPO_NAME="${{ github.event.repository.name }}"
+        REPO_NAME="${{ github.workflow }}"
         BUCKET_NAME="${REPO_NAME}-${ACCOUNT_ID}-tf-state"
         DYNAMO_TABLE="${REPO_NAME}-tf-lock"
         STATE_KEY="ecs/terraform.tfstate"
