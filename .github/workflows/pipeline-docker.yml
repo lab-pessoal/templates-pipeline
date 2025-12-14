@@ -37,10 +37,10 @@ jobs:
           aws-region: us-east-1
 
       - name: Build NPM
-        uses: ./templates-pipelines/.github/workflows/actions/node/build
+        uses: ./templates-pipeline/.github/workflows/actions/node/build
 
       - name: Docker Build and Push
-        uses: ./templates-pipelines/.github/workflows/actions/docker/dev
+        uses: ./templates-pipeline/.github/workflows/actions/docker/dev
 
       # - run: aws sts get-caller-identity
 
