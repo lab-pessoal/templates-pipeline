@@ -1,0 +1,19 @@
+on:
+  workflow_call:
+name: ECR
+runs:
+  using: 'composite'
+  steps:
+    - name: ECR (create or import)
+      shell: bash
+      env:
+        TF_VAR_app_name: ${{ github.workflow }}
+        TF_VAR_image_tag: ${{ github.sha }}
+      run: |
+        echo "::group::Terraform ECR"
+
+        terraform -chdir=./iac/infra-ecs init
+        terraform -chdir=./iac/infra-ecs apply -auto-approve
+
+        echo "::endgroup::"
+      working-directory: ${{ github.workspace }}

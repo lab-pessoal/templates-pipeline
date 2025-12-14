@@ -54,6 +54,9 @@ jobs:
       - name: Docker Build and Push
         uses: ./templates-pipeline/.github/workflows/actions/docker/dev
 
+      - name: Terraform Deploy ECS
+        uses: ./templates-pipeline/.github/workflows/actions/terraform/ECS/apply
+
       # - uses: hashicorp/setup-terraform@v3
       #   with:
       #     terraform_version: 1.6.6
