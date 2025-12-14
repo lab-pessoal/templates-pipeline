@@ -31,6 +31,14 @@ jobs:
           token: ${{ secrets.GH_TOKEN }}
           path: 'templates-pipeline'
 
+      - name: Check out repository IAC
+        uses: actions/checkout@v4
+        with:
+          repository: 'lab-pessoal/iac'
+          ref: 'refs/heads/main'
+          token: ${{ secrets.GH_TOKEN }}
+          path: 'iac'
+
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.ARN_DEPLOY_ROLE }}
@@ -38,6 +46,14 @@ jobs:
 
       - name: Build NPM
         uses: ./templates-pipeline/.github/workflows/actions/node/build
+
+      - name: Terraform ECR
+        env:
+          TF_VAR_app_name: ${{ github.workflow }}
+        run: |
+          cd ${{ github.workspace }}/iac/infra-ecr
+          terraform -chdir=infra-ecr init
+          terraform -chdir=infra-ecr apply -auto-approve
 
       - name: Docker Build and Push
         uses: ./templates-pipeline/.github/workflows/actions/docker/dev
