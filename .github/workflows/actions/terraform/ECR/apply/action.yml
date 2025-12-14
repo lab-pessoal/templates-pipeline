@@ -1,0 +1,24 @@
+on:
+  workflow_call:
+name: ECR
+runs:
+  using: 'composite'
+  steps:
+    - uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.6.6
+
+    - name: ECR
+      shell: bash
+      env: 
+        TF_VAR_app_name: ${{ github.workflow }}
+      run: | 
+        echo "::group::Terraform ECR"
+        cd ${{ github.workspace }}/iac/infra-ecr
+
+          terraform -chdir=infra-ecr init
+          terraform -chdir=infra-ecr apply -auto-approve
+
+        echo "::endgroup::"
+  
+      working-directory: ${{ github.workspace }}
