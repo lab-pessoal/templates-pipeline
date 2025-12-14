@@ -1,0 +1,16 @@
+on:
+  workflow_call:
+name: NPM
+runs:
+  using: 'composite'
+  steps:
+    - name: NPM
+      shell: bash
+      run: | 
+        echo "::group::Npm Build"
+
+        npm install
+
+        echo "::endgroup::"
+  
+      working-directory: ${{ github.workspace }}

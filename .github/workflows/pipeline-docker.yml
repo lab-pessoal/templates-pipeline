@@ -1,0 +1,62 @@
+name: poc-teddy-openfinance
+on:
+  workflow_dispatch:
+  workflow_call:
+    # inputs:
+    #   ambiente:
+    #     required: true
+    #     type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        name: Checkout code
+        with:
+          clean: true
+
+      - name: Check out repository templates-pipelines-actions
+        uses: actions/checkout@v4
+        with:
+          repository: 'lab-pessoal/templates-pipelines'
+          ref: 'refs/heads/main'
+          token: ${{ secrets.GH_TOKEN }}
+          path: 'templates-pipeline'
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.ARN_DEPLOY_ROLE }}
+          aws-region: us-east-1
+
+      - name: Build NPM
+        uses: ./templates-pipelines/.github/workflows/actions/node/build
+
+      - name: Docker Build and Push
+        uses: ./templates-pipelines/.github/workflows/actions/docker/dev
+
+      # - run: aws sts get-caller-identity
+
+      # - uses: hashicorp/setup-terraform@v3
+      #   with:
+      #     terraform_version: 1.6.6
+
+      # - name: Terraform Apply EC2
+      #   env:
+      #     TF_VAR_app_name: ${{ github.event.repository.name }}
+      #     TF_VAR_env: dev
+      #   run: |
+      #     terraform -chdir=infra-ec2 init
+      #     terraform -chdir=infra-ec2 apply -auto-approve
+
+      # - name: Terraform Destroy EC2
+      #   if: always()
+      #   env:
+      #     TF_VAR_app_name: ${{ github.event.repository.name }}
+      #     TF_VAR_env: dev
+      #   run: |
+      #     terraform -chdir=infra-ec2 destroy -auto-approve
