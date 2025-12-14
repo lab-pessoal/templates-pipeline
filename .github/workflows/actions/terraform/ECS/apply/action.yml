@@ -5,7 +5,12 @@ description: 'Terraform setup with dynamic backend and auto-import'
 runs:
   using: "composite"
   steps:
-    - name: Terraform Deploy (Dynamic Backend)
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.6.6
+
+    - name: Terraform Deploy (Full Auto-Import)
       shell: bash
       env:
         AWS_REGION: us-east-1
@@ -13,45 +18,31 @@ runs:
         TF_VAR_image_tag: ${{ github.sha }}
       run: |
         set -e
+
         ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-        REPO_NAME="${{ github.workflow }}"
-        
-        # Define nomes. Ex: teddy-openfinance-123456789-tf-state
+        REPO_NAME="${{ github.event.repository.name }}"
         BUCKET_NAME="${REPO_NAME}-${ACCOUNT_ID}-tf-state"
         DYNAMO_TABLE="${REPO_NAME}-tf-lock"
-        STATE_KEY="ecs/terraform.tfstate" # Pasta dentro do bucket
+        STATE_KEY="ecs/terraform.tfstate"
 
-        echo "::group::Configuração Automática do Backend"
-        echo "Bucket S3 alvo: $BUCKET_NAME"
-        echo "Tabela DynamoDB alvo: $DYNAMO_TABLE"
-
-        if aws s3api head-bucket --bucket "$BUCKET_NAME" 2>/dev/null; then
-          echo "Bucket S3 já existe."
-        else
-          echo "Criando Bucket S3..."
+        echo "::group::Setup Backend"
+        if ! aws s3api head-bucket --bucket "$BUCKET_NAME" 2>/dev/null; then
           aws s3api create-bucket --bucket "$BUCKET_NAME" --region "$AWS_REGION"
           aws s3api put-bucket-versioning --bucket "$BUCKET_NAME" --versioning-configuration Status=Enabled
         fi
 
-        if aws dynamodb describe-table --table-name "$DYNAMO_TABLE" --region "$AWS_REGION" >/dev/null 2>&1; then
-          echo "Tabela DynamoDB já existe."
-        else
-          echo "Criando Tabela DynamoDB..."
-          aws dynamodb create-table \
-            --table-name "$DYNAMO_TABLE" \
+        if ! aws dynamodb describe-table --table-name "$DYNAMO_TABLE" --region "$AWS_REGION" >/dev/null 2>&1; then
+          aws dynamodb create-table --table-name "$DYNAMO_TABLE" \
             --attribute-definitions AttributeName=LockID,AttributeType=S \
             --key-schema AttributeName=LockID,KeyType=HASH \
             --provisioned-throughput ReadCapacityUnits=5,WriteCapacityUnits=5 \
             --region "$AWS_REGION"
-          
-          echo "Aguardando tabela ficar ativa..."
           aws dynamodb wait table-exists --table-name "$DYNAMO_TABLE" --region "$AWS_REGION"
         fi
         echo "::endgroup::"
 
         echo "::group::Terraform Init"
         cd ./iac/infra-ecs
-        
         terraform init \
           -backend-config="bucket=${BUCKET_NAME}" \
           -backend-config="key=${STATE_KEY}" \
@@ -59,32 +50,43 @@ runs:
           -backend-config="dynamodb_table=${DYNAMO_TABLE}" \
           -reconfigure
         echo "::endgroup::"
-        
-        echo "::group::Verificação de Recursos Existentes"
+
+        echo "::group::Importação de Recursos Existentes"
         APP_NAME="$TF_VAR_app_name"
 
-        import_if_missing() {
-          local resource_addr=$1
-          local resource_id=$2
-          if terraform state show "$resource_addr" >/dev/null 2>&1; then
-            echo "$resource_addr já está no state."
-          else
-             # Tenta importar apenas se o recurso existir na AWS (verifica se ID não é vazio/None)
-             if [ "$resource_id" != "None" ] && [ "$resource_id" != "" ]; then
-                echo "⚠️ Importando $resource_addr ($resource_id)..."
-                terraform import "$resource_addr" "$resource_id" || echo "Falha ao importar, continuará para criação..."
-             fi
+        # Função auxiliar para importar somente se necessário
+        import_if_exists() {
+          local addr=$1
+          local id=$2
+          if [ "$id" != "None" ] && [ "$id" != "" ]; then
+            if ! terraform state show "$addr" >/dev/null 2>&1; then
+              echo "🔄 Importando $addr ($id)..."
+              terraform import "$addr" "$id" || echo "⚠️ Falha não crítica no import de $addr"
+            else
+              echo "✅ $addr já está no state."
+            fi
           fi
         }
 
-        SG_ID=$(aws ec2 describe-security-groups --filters "Name=group-name,Values=${APP_NAME}-alb-sg" --query "SecurityGroups[0].GroupId" --output text 2>/dev/null || echo "None")
+        ROLE_NAME="${APP_NAME}-task-exec"
+        ROLE_CHECK=$(aws iam get-role --role-name "$ROLE_NAME" --query "Role.RoleName" --output text 2>/dev/null || echo "None")
+        import_if_exists "aws_iam_role.task_exec" "$ROLE_CHECK"
+
+        SG_ALB_ID=$(aws ec2 describe-security-groups --filters "Name=group-name,Values=${APP_NAME}-alb-sg" --query "SecurityGroups[0].GroupId" --output text 2>/dev/null || echo "None")
+        import_if_exists "aws_security_group.alb" "$SG_ALB_ID"
+
+        SG_ECS_ID=$(aws ec2 describe-security-groups --filters "Name=group-name,Values=${APP_NAME}-ecs-sg" --query "SecurityGroups[0].GroupId" --output text 2>/dev/null || echo "None")
+        import_if_exists "aws_security_group.ecs" "$SG_ECS_ID"
+
+        ALB_ARN=$(aws elbv2 describe-load-balancers --names "${APP_NAME}-alb" --query "LoadBalancers[0].LoadBalancerArn" --output text 2>/dev/null || echo "None")
+        import_if_exists "aws_lb.this" "$ALB_ARN"
+
         TG_ARN=$(aws elbv2 describe-target-groups --names "${APP_NAME}-tg" --query "TargetGroups[0].TargetGroupArn" --output text 2>/dev/null || echo "None")
+        import_if_exists "aws_lb_target_group.this" "$TG_ARN"
+
         CLUSTER_ARN=$(aws ecs describe-clusters --clusters "${APP_NAME}-cluster" --query "clusters[0].clusterArn" --output text 2>/dev/null || echo "None")
-        
-        import_if_missing "aws_security_group.alb" "$SG_ID"
-        import_if_missing "aws_lb_target_group.this" "$TG_ARN"
         if [ "$CLUSTER_ARN" != "MISSING" ]; then
-            import_if_missing "aws_ecs_cluster.this" "${APP_NAME}-cluster"
+            import_if_exists "aws_ecs_cluster.this" "${APP_NAME}-cluster"
         fi
         echo "::endgroup::"
 
