@@ -24,9 +24,9 @@ runs:
         echo -e "${VERDE}docker push ${REGISTRY}:${{ github.sha }}${FIM}"
         docker push ${REGISTRY}:${{ github.sha }}
         
-        docker tag ${REGISTRY}:${{ github.sha }} ${REGISTRY}:latest
-        echo -e "${VERDE}docker push ${REGISTRY}:latest${FIM}"
-        docker push ${REGISTRY}:latest
+        # docker tag ${REGISTRY}:${{ github.sha }} ${REGISTRY}:latest
+        # echo -e "${VERDE}docker push ${REGISTRY}:latest${FIM}"
+        # docker push ${REGISTRY}:latest
 
         echo "::endgroup::"
   
