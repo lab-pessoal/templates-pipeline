@@ -14,7 +14,9 @@ runs:
         TF_VAR_app_name: ${{ github.workflow }}
       run: | 
         echo "::group::Terraform ECR"
-        cd ${{ github.workspace }}/iac/infra-ecr
+        ls -lah;pwd
+        cd ${{ github.workspace }}/iac/infra-
+        ls -lah;pwd
 
           terraform -chdir=infra-ecr init
           terraform -chdir=infra-ecr apply -auto-approve
