@@ -13,7 +13,7 @@ runs:
         echo "::group::Docker Build and Push"
         export VERDE='\033[0;32m'
         export FIM='\033[0m'
-        export REGISTRY=821214029626.dkr.ecr.us-east-1.amazonaws.com/${{ github.event.repository.name }}
+        export REGISTRY=821214029626.dkr.ecr.us-east-1.amazonaws.com/${{ github_workflow }}
 
         docker build -t ${REGISTRY}:${{ github.sha }} .
 
