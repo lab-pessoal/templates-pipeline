@@ -4,6 +4,9 @@ name: Docker
 runs:
   using: 'composite'
   steps:
+    - name: Configurando Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
     - name: Docker Push
       shell: bash
       run: | 
@@ -12,12 +15,12 @@ runs:
         export FIM='\033[0m'
         export REGISTRY=821214029626.dkr.ecr.us-east-1.amazonaws.com/${{ github.event.repository.name }}
 
-        docker build -t ${REGISTRY}:${{ GITHUB_SHA }} .
+        docker build -t ${REGISTRY}:${{ github.sha }} .
 
-        echo -e "${VERDE}docker push ${REGISTRY}:${{ GITHUB_SHA }}${FIM}"
-        docker push ${REGISTRY}:${{ GITHUB_SHA }}
+        echo -e "${VERDE}docker push ${REGISTRY}:${{ github.sha }}${FIM}"
+        docker push ${REGISTRY}:${{ github.sha }}
         
-        docker tag ${REGISTRY}:${{ GITHUB_SHA }} ${REGISTRY}:latest
+        docker tag ${REGISTRY}:${{ github.sha }} ${REGISTRY}:latest
         echo -e "${VERDE}docker push ${REGISTRY}:latest${FIM}"
         docker push ${REGISTRY}:latest
 
