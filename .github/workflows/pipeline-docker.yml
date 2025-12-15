@@ -1,4 +1,4 @@
-name: poc-teddy-openfinance
+name: docker-terraform-pipeline
 on:
   workflow_dispatch:
   workflow_call:
