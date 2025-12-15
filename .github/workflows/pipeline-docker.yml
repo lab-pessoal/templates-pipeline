@@ -5,7 +5,7 @@ on:
     inputs:
       infra:
         required: true
-        type: boolean
+        type: string
 
 permissions:
   id-token: write
@@ -16,7 +16,7 @@ env:
 
 jobs:
   INFRA:
-    if: ${{ inputs.infra == true }}
+    if: ${{ inputs.infra == 'Sim' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
