@@ -52,8 +52,6 @@ jobs:
         uses: ./templates-pipeline/.github/workflows/actions/terraform/EC2/destroy
 
   DEV:
-    needs: INFRA
-    if: ${{ needs.INFRA.result == 'success' || needs.INFRA.result == 'skipped' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
