@@ -2,10 +2,10 @@ name: poc-teddy-openfinance
 on:
   workflow_dispatch:
   workflow_call:
-    # inputs:
-    #   ambiente:
-    #     required: true
-    #     type: string
+    inputs:
+      infra:
+        required: true
+        type: boolean
 
 permissions:
   id-token: write
@@ -15,7 +15,39 @@ env:
   GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
 jobs:
+  INFRA:
+    if: ${{ inputs.infra == true }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        name: Checkout code
+        with:
+          clean: true
+
+      - name: Check out repository templates-pipeline
+        uses: actions/checkout@v4
+        with:
+          repository: 'lab-pessoal/templates-pipeline'
+          ref: 'refs/heads/main'
+          token: ${{ secrets.GH_TOKEN }}
+          path: 'templates-pipeline'
+
+      - name: Check out repository IAC
+        uses: actions/checkout@v4
+        with:
+          repository: 'lab-pessoal/iac'
+          ref: 'refs/heads/main'
+          token: ${{ secrets.GH_TOKEN }}
+          path: 'iac'
+
+      - name: Terraform provisionamento EC2
+        uses: ./templates-pipeline/.github/workflows/actions/terraform/EC2/apply
+
+      - name: Terraform destroy EC2
+        uses: ./templates-pipeline/.github/workflows/actions/terraform/EC2/destroy
+
   DEV:
+    needs: INFRA
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -46,7 +78,6 @@ jobs:
 
       - name: Build NPM
         uses: ./templates-pipeline/.github/workflows/actions/node/build
-
       
       - name: Terraform ECR
         uses: ./templates-pipeline/.github/workflows/actions/terraform/ECR/apply
@@ -56,23 +87,3 @@ jobs:
 
       - name: Terraform Deploy ECS
         uses: ./templates-pipeline/.github/workflows/actions/terraform/ECS/apply
-
-      # - uses: hashicorp/setup-terraform@v3
-      #   with:
-      #     terraform_version: 1.6.6
-
-      # - name: Terraform Apply EC2
-      #   env:
-      #     TF_VAR_app_name: ${{ github.event.repository.name }}
-      #     TF_VAR_env: dev
-      #   run: |
-      #     terraform -chdir=infra-ec2 init
-      #     terraform -chdir=infra-ec2 apply -auto-approve
-
-      # - name: Terraform Destroy EC2
-      #   if: always()
-      #   env:
-      #     TF_VAR_app_name: ${{ github.event.repository.name }}
-      #     TF_VAR_env: dev
-      #   run: |
-      #     terraform -chdir=infra-ec2 destroy -auto-approve

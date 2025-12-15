@@ -1,0 +1,31 @@
+name: EC2 Destroy
+description: 'Terraform EC2 destroy (LAB demo)'
+runs:
+  using: "composite"
+  steps:
+    - name: Terraform Destroy
+      shell: bash
+      env:
+        AWS_REGION: us-east-1
+        TF_VAR_app_name: ${{ github.workflow }}
+        TF_VAR_env: dev
+      run: |
+        set -e
+
+        ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+        REPO_NAME="${TF_VAR_app_name}"
+        BUCKET_NAME="${REPO_NAME}-${ACCOUNT_ID}-tf-state"
+        DYNAMO_TABLE="${REPO_NAME}-tf-lock"
+        STATE_KEY="ec2/terraform.tfstate"
+
+        cd ./iac/infra-ec2
+
+        terraform init \
+          -backend-config="bucket=${BUCKET_NAME}" \
+          -backend-config="key=${STATE_KEY}" \
+          -backend-config="region=${AWS_REGION}" \
+          -backend-config="dynamodb_table=${DYNAMO_TABLE}" \
+          -reconfigure
+
+        terraform destroy -auto-approve
+      working-directory: ${{ github.workspace }}

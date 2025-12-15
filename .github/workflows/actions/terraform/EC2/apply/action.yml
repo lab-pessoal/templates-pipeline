@@ -1,0 +1,84 @@
+name: EC2 Deploy
+description: 'Terraform EC2 with dynamic backend and auto-import'
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.6.6
+
+    - name: Terraform Deploy (EC2 Full Auto-Import)
+      shell: bash
+      env:
+        AWS_REGION: us-east-1
+        TF_VAR_app_name: ${{ github.workflow }}
+        TF_VAR_env: dev
+      run: |
+        set -e
+
+        ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+        REPO_NAME="${{ github.workflow }}"
+        BUCKET_NAME="${REPO_NAME}-${ACCOUNT_ID}-tf-state"
+        DYNAMO_TABLE="${REPO_NAME}-tf-lock"
+        STATE_KEY="ec2/terraform.tfstate"
+
+        echo "::group::Setup Backend"
+        if ! aws s3api head-bucket --bucket "$BUCKET_NAME" 2>/dev/null; then
+          aws s3api create-bucket --bucket "$BUCKET_NAME" --region "$AWS_REGION"
+          aws s3api put-bucket-versioning --bucket "$BUCKET_NAME" --versioning-configuration Status=Enabled
+        fi
+
+        if ! aws dynamodb describe-table --table-name "$DYNAMO_TABLE" --region "$AWS_REGION" >/dev/null 2>&1; then
+          aws dynamodb create-table --table-name "$DYNAMO_TABLE" \
+            --attribute-definitions AttributeName=LockID,AttributeType=S \
+            --key-schema AttributeName=LockID,KeyType=HASH \
+            --provisioned-throughput ReadCapacityUnits=5,WriteCapacityUnits=5 \
+            --region "$AWS_REGION"
+          aws dynamodb wait table-exists --table-name "$DYNAMO_TABLE" --region "$AWS_REGION"
+        fi
+        echo "::endgroup::"
+
+        echo "::group::Terraform Init"
+        cd ./iac/infra-ec2
+        terraform init \
+          -backend-config="bucket=${BUCKET_NAME}" \
+          -backend-config="key=${STATE_KEY}" \
+          -backend-config="region=${AWS_REGION}" \
+          -backend-config="dynamodb_table=${DYNAMO_TABLE}" \
+          -reconfigure
+        echo "::endgroup::"
+
+        echo "::group::Importação de Recursos Existentes"
+        APP_NAME="$TF_VAR_app_name"
+        ENV_NAME="$TF_VAR_env"
+
+        import_if_exists() {
+          local addr=$1
+          local id=$2
+          if [ "$id" != "None" ] && [ "$id" != "" ]; then
+            if ! terraform state show "$addr" >/dev/null 2>&1; then
+              echo "🔄 Importando $addr ($id)..."
+              terraform import "$addr" "$id" || echo "⚠️ Falha não crítica no import de $addr"
+            else
+              echo "✅ $addr já está no state."
+            fi
+          fi
+        }
+
+        SG_ID=$(aws ec2 describe-security-groups \
+          --filters "Name=group-name,Values=${APP_NAME}-${ENV_NAME}-sg" \
+          --query "SecurityGroups[0].GroupId" --output text 2>/dev/null || echo "None")
+        import_if_exists "aws_security_group.ec2" "$SG_ID"
+
+        INSTANCE_ID=$(aws ec2 describe-instances \
+          --filters "Name=tag:Name,Values=${APP_NAME}-${ENV_NAME}-ec2" "Name=instance-state-name,Values=pending,running,stopping,stopped" \
+          --query "Reservations[0].Instances[0].InstanceId" --output text 2>/dev/null || echo "None")
+        import_if_exists "aws_instance.this" "$INSTANCE_ID"
+
+        echo "::endgroup::"
+
+        echo "::group::Terraform Apply"
+        terraform apply -auto-approve
+        echo "::endgroup::"
+      working-directory: ${{ github.workspace }}
