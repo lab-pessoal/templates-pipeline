@@ -39,6 +39,11 @@ jobs:
           ref: 'refs/heads/main'
           token: ${{ secrets.GH_TOKEN }}
           path: 'iac'
+      
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.ARN_DEPLOY_ROLE }}
+          aws-region: us-east-1
 
       - name: Terraform provisionamento EC2
         uses: ./templates-pipeline/.github/workflows/actions/terraform/EC2/apply
