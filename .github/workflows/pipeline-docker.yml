@@ -2,55 +2,11 @@ name: docker-terraform-pipeline
 on:
   workflow_dispatch:
   workflow_call:
-    inputs:
-      infra:
-        required: true
-        type: string
-
-permissions:
-  id-token: write
-  contents: read
 
 env:
   GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
 jobs:
-  INFRA:
-    if: ${{ inputs.infra == 'Sim' }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        name: Checkout code
-        with:
-          clean: true
-
-      - name: Check out repository templates-pipeline
-        uses: actions/checkout@v4
-        with:
-          repository: 'lab-pessoal/templates-pipeline'
-          ref: 'refs/heads/main'
-          token: ${{ secrets.GH_TOKEN }}
-          path: 'templates-pipeline'
-
-      - name: Check out repository IAC
-        uses: actions/checkout@v4
-        with:
-          repository: 'lab-pessoal/iac'
-          ref: 'refs/heads/main'
-          token: ${{ secrets.GH_TOKEN }}
-          path: 'iac'
-      
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.ARN_DEPLOY_ROLE }}
-          aws-region: us-east-1
-
-      - name: Terraform provisionamento EC2
-        uses: ./templates-pipeline/.github/workflows/actions/terraform/EC2/apply
-
-      - name: Terraform destroy EC2
-        uses: ./templates-pipeline/.github/workflows/actions/terraform/EC2/destroy
-
   DEV:
     runs-on: ubuntu-latest
     steps:
@@ -67,27 +23,18 @@ jobs:
           token: ${{ secrets.GH_TOKEN }}
           path: 'templates-pipeline'
 
-      - name: Check out repository IAC
-        uses: actions/checkout@v4
-        with:
-          repository: 'lab-pessoal/iac'
-          ref: 'refs/heads/main'
-          token: ${{ secrets.GH_TOKEN }}
-          path: 'iac'
-
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.ARN_DEPLOY_ROLE }}
-          aws-region: us-east-1
-
       - name: Build NPM
         uses: ./templates-pipeline/.github/workflows/actions/node/build
-      
-      - name: Terraform ECR
-        uses: ./templates-pipeline/.github/workflows/actions/terraform/ECR/apply
 
-      - name: Docker Build and Push
-        uses: ./templates-pipeline/.github/workflows/actions/docker/dev
+      - name: Run application
+        run: |
+          npm start &
+          for i in {1..30}; do
+            curl -sf http://localhost:3000/health && break
+            sleep 2
+          done
 
-      - name: Terraform Deploy ECS
-        uses: ./templates-pipeline/.github/workflows/actions/terraform/ECS/apply
+      - name: k6
+        env:
+          API_URL: http://localhost:3000
+        uses: ./templates-pipeline/.github/workflows/actions/k6

@@ -1,0 +1,13 @@
+on:
+  workflow_call:
+name: Teste de carga
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup k6
+      uses: grafana/setup-k6-action@v1
+
+    - name: Teste de carga k6
+      uses: grafana/run-k6-action@v1
+      with:
+        path: "./tests/load-test.js"
